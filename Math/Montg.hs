@@ -6,22 +6,24 @@ module Math.Montg
 
 import Data.Bits
 
+newtype Dep a b = Dep { unDep :: b }
+
 data One = One
 
 data D0 a = D0 a
 data D1 a = D1 a
 
 class PostiveN a where
-    p2num :: (Num b, Bits b) => a -> b
+    p2num :: (Num b, Bits b) => Dep a b
 
 instance PostiveN One where
-    p2num _ = 1
+    p2num = Dep 1
 
-instance PostiveN a => PostiveN (D0 a) where
-    p2num _ = p2num (undefined :: a) * 2
+instance PostiveN p => PostiveN (D0 p) where
+    p2num = Dep (unDep (p2num :: forall b. (Num b, Bits b) => Dep p b) * 2)
 
-instance PostiveN a => PostiveN (D1 a) where
-    p2num _ = p2num (undefined :: a) * 2 + 1
+instance PostiveN p => PostiveN (D1 p) where
+    p2num = Dep (unDep (p2num :: forall b. (Num b, Bits b) => Dep p b) * 2 + 1)
 
 ctz :: (Num a, Bits a) => a -> Int
 ctz x | testBit x 0 = 0
@@ -31,32 +33,33 @@ bitLen :: (Num a, Bits a) => a -> Int
 bitLen 0 = 0
 bitLen x = bitLen (x `shiftR` 1) + 1
 
-pmask :: (PostiveN a, Num b, Bits b) => a -> b
-pmask p | False                 = n
-        | bitLen n == ctz n + 1 = bit (ctz n) - 1
-        | otherwise             = bit (bitLen n) - 1
+pmask :: forall p b. (PostiveN p, Num b, Bits b) => Dep p b
+pmask | bitLen n == ctz n + 1 = Dep (bit (ctz n) - 1)
+      | otherwise             = Dep (bit (bitLen n) - 1)
   where
-    n = p2num p
+    n = unDep (p2num :: Dep p b)
 
-addmod2 :: (PostiveN a, Num b, Bits b) => a -> b -> b -> b
-addmod2 p a b = (a + b) .&. pmask p
+addmod2 :: forall p b. (PostiveN p, Num b, Bits b) => p -> b -> b -> b
+addmod2 _ a b = (a + b) .&. unDep (pmask :: Dep p b)
 {-# INLINE addmod2 #-}
 
-submod2 :: (PostiveN a, Num b, Bits b) => a -> b -> b -> b
-submod2 p a b = (a - b) .&. pmask p
+submod2 :: forall p b. (PostiveN p, Num b, Bits b) => p -> b -> b -> b
+submod2 _ a b = (a - b) .&. unDep (pmask :: Dep p b)
 {-# INLINE submod2 #-}
 
-mulmod2 :: (PostiveN a, Num b, Bits b) => a -> b -> b -> b
-mulmod2 p a b = (a * b) .&. pmask p
+mulmod2 :: forall p b. (PostiveN p, Num b, Bits b) => p -> b -> b -> b
+mulmod2 _ a b = (a * b) .&. unDep (pmask :: Dep p b)
 {-# INLINE mulmod2 #-}
 
-addmod :: (PostiveN a, Integral b, Bits b) => a -> b -> b -> b
-addmod p a b | a + b >= p2num p = a + b - p2num p
-             | otherwise        = a + b
+addmod :: forall p b. (PostiveN p, Integral b, Bits b) => p -> b -> b -> b
+addmod _ a b | a + b >= p = a + b - p
+             | otherwise  = a + b
+  where
+    p = unDep (p2num :: Dep p b)
 {-# INLINE addmod #-}
 
-submod :: (PostiveN a, Integral b, Bits b) => a -> b -> b -> b
-submod p a b | a < b     = a + p2num p - b
+submod :: forall p b. (PostiveN p, Integral b, Bits b) => p -> b -> b -> b
+submod _ a b | a < b     = a + unDep (p2num :: Dep p b) - b
              | otherwise = a - b
 {-# INLINE submod #-}
 
@@ -79,51 +82,52 @@ extgcd a b = let
 newtype PostiveN p => ModP2 p a = ModP2 { unModP2 :: a } deriving Eq
 
 instance (PostiveN p, Integral a, Bits a) => Show (ModP2 p a) where
-    show (ModP2 r) = show r ++ "+" ++ show (pmask (undefined :: p) + 1 :: a) ++ "Z"
+    show (ModP2 r) = show r ++ "+" ++ show (unDep (pmask :: Dep p a) + 1) ++ "Z"
 
 instance (PostiveN p, Integral a, Bits a) => Num (ModP2 p a) where
     ModP2 a + ModP2 b = ModP2 $ addmod2 (undefined :: p) a b
     ModP2 a - ModP2 b = ModP2 $ submod2 (undefined :: p) a b
     ModP2 a * ModP2 b = ModP2 $ mulmod2 (undefined :: p) a b
-    fromInteger = ModP2 . fromInteger . (`mod` (pmask (undefined :: p) + 1))
+    fromInteger = ModP2 . fromInteger . (`mod` (unDep (pmask :: Dep p Integer) + 1))
     abs = id
     signum = const 1
 
-montgKeys :: (PostiveN p, Integral a, Bits a) => p -> a
-montgKeys p | ctz n /= 0 = error "ModP : p must be odd"
-            | g /= 1     = error "ModP : internal error"
-            | otherwise  = (-n') `mod` r
+montgKeys :: forall p b. (PostiveN p, Integral b, Bits b) => Dep p b
+montgKeys | ctz n /= 0 = error "ModP : p must be odd"
+          | g /= 1     = error "ModP : internal error"
+          | otherwise  = Dep ((-n') `mod` r)
   where
-    n = p2num p
+    n = unDep (p2num :: Dep p b)
     blen = bitLen n
     r = bit blen
 
     (g, r', n') = extgcd r n
 
-trans :: (PostiveN p, Integral a, Bits a) => p -> a -> a
-trans p x = (x `shiftL` bitLen n) `mod` n
+trans :: forall p b. (PostiveN p, Integral b, Bits b) => p -> b -> b
+trans _ x = (x `shiftL` bitLen n) `mod` n
   where
-    n = p2num p
+    n = unDep (p2num :: Dep p b)
 
-reduce :: (PostiveN p, Integral a, Bits a) => p -> a -> a
-reduce p x
+reduce :: forall p b. (PostiveN p, Integral b, Bits b) => p -> b -> b
+reduce _ x
     | a > n     = a - n
     | otherwise = a
   where
-    n = p2num p
-    q = ((x .&. pmask p) * montgKeys p) .&. pmask p
+    n = unDep (p2num :: Dep p b)
+    pm = unDep (pmask :: Dep p b)
+    q = ((x .&. pm) * unDep (montgKeys :: Dep p b)) .&. pm
     a = (x + q * n) `shiftR` bitLen n
 
 newtype PostiveN p => ModP p a = ModP { unModP :: a } deriving Eq
 
 instance (PostiveN p, Integral a, Bits a) => Show (ModP p a) where
-    show (ModP r) = show (reduce (undefined :: p) r) ++ "+" ++ show (p2num (undefined :: p) :: a) ++ "Z"
+    show (ModP r) = show (reduce (undefined :: p) r) ++ "+" ++ show (unDep (p2num :: Dep p a)) ++ "Z"
 
 instance (PostiveN p, Integral a, Bits a) => Num (ModP p a) where
     ModP a + ModP b = ModP $ addmod (undefined :: p) a b
     ModP a - ModP b = ModP $ submod (undefined :: p) a b
     ModP a * ModP b = ModP $ reduce (undefined :: p) (a * b)
-    fromInteger = ModP . trans (undefined :: p). fromInteger . (`mod` p2num (undefined :: p))
+    fromInteger = ModP . trans (undefined :: p). fromInteger . (`mod` unDep (p2num :: Dep p Integer))
     abs = id
     signum = const 1
 

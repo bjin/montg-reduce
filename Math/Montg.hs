@@ -60,9 +60,9 @@ extgcd a b = let
              in
                  (g, x, y - adivb * x)
 
-newtype PositiveN p b => ModP2 p b = ModP2 { unModP2 :: b } deriving Eq
+newtype ModP2 p b = ModP2 { unModP2 :: b } deriving Eq
 
-instance PositiveN p b => Show (ModP2 p b) where
+instance (Show b, PositiveN p b) => Show (ModP2 p b) where
     show (ModP2 r) = show r ++ "+" ++ show (unDep (pmask :: Dep p b) + 1) ++ "Z"
 
 instance PositiveN p b => Num (ModP2 p b) where
@@ -97,9 +97,9 @@ reduce (Dep x)
     q = ((x .&. pm) * unDep (montgKeys :: Dep p b)) .&. pm
     a = (x + q * n) `shiftR` unDep (bitLen :: Dep (p, b) Int)
 
-newtype PositiveN p b => ModP p b = ModP { unModP :: b } deriving Eq
+newtype ModP p b = ModP { unModP :: b } deriving Eq
 
-instance PositiveN p b => Show (ModP p b) where
+instance (Show b, PositiveN p b) => Show (ModP p b) where
     show (ModP r) = show (unDep (reduce (Dep r) :: Dep p b)) ++ "+" ++ show (unDep (p2num :: Dep p b)) ++ "Z"
 
 instance PositiveN p b => Num (ModP p b) where
